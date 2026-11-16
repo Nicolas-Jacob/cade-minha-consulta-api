@@ -19,14 +19,13 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @RestControllerAdvice
@@ -44,9 +43,6 @@ public class GlobalExceptionHandler {
             20007, HttpStatus.UNPROCESSABLE_ENTITY  // Data da consulta precisa ser futura (trigger)
     );
 
-    // Pega so o texto depois de "ORA-200xx: " ate a primeira quebra de linha (descarta ORA-06512 etc.)
-    private static final Pattern MENSAGEM_ORACLE = Pattern.compile("ORA-200\\d{2}: ([^\\r\\n]*)");
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErroResponse> validacao(MethodArgumentNotValidException ex, HttpServletRequest request) {
         List<CampoErro> campos = ex.getBindingResult().getFieldErrors().stream()
@@ -60,7 +56,9 @@ public class GlobalExceptionHandler {
         return responder(HttpStatus.BAD_REQUEST, "Corpo da requisicao invalido ou mal formatado.", request);
     }
 
-    @ExceptionHandler({MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class})
+    // HandlerMethodValidationException: @Min/@Max em parametros de query (ex.: ?dias=0)
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class,
+            HandlerMethodValidationException.class})
     public ResponseEntity<ErroResponse> parametroInvalido(Exception ex, HttpServletRequest request) {
         return responder(HttpStatus.BAD_REQUEST, "Parametro invalido ou ausente na requisicao.", request);
     }
@@ -158,34 +156,16 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErroResponse> erroOracle(Throwable ex, HttpServletRequest request) {
-        SQLException sql = buscarErroOracle(ex);
+        SQLException sql = ErroOracle.buscar(ex);
         if (sql == null) {
             return null;
         }
-        return responder(ERROS_ORACLE.get(sql.getErrorCode()), mensagemOracle(sql), request);
+        return responder(ERROS_ORACLE.get(sql.getErrorCode()), ErroOracle.mensagem(sql), request);
     }
 
     private ResponseEntity<ErroResponse> erroInterno(Exception ex, HttpServletRequest request) {
         log.error("Erro inesperado em {}", request.getRequestURI(), ex);
         return responder(HttpStatus.INTERNAL_SERVER_ERROR, "Erro interno no servidor. Tente novamente mais tarde.", request);
-    }
-
-    // Percorre as causas procurando a SQLException com codigo -20001 a -20007
-    private static SQLException buscarErroOracle(Throwable ex) {
-        Throwable atual = ex;
-        while (atual != null) {
-            if (atual instanceof SQLException sql && ERROS_ORACLE.containsKey(sql.getErrorCode())) {
-                return sql;
-            }
-            atual = atual.getCause() == atual ? null : atual.getCause();
-        }
-        return null;
-    }
-
-    static String mensagemOracle(SQLException sql) {
-        String mensagem = sql.getMessage() == null ? "" : sql.getMessage();
-        Matcher matcher = MENSAGEM_ORACLE.matcher(mensagem);
-        return matcher.find() ? matcher.group(1).trim() : mensagem.trim();
     }
 
     private ResponseEntity<ErroResponse> responder(HttpStatus status, String mensagem, HttpServletRequest request) {
