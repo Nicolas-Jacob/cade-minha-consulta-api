@@ -4,8 +4,10 @@ import br.com.fiap.cademinhaconsulta.dto.AgendamentoRequest;
 import br.com.fiap.cademinhaconsulta.dto.ConsultaResponse;
 import br.com.fiap.cademinhaconsulta.dto.PaginaResponse;
 import br.com.fiap.cademinhaconsulta.dto.PresencaRequest;
+import br.com.fiap.cademinhaconsulta.dto.RiscoFaltaResponse;
 import br.com.fiap.cademinhaconsulta.service.AgendamentoService;
 import br.com.fiap.cademinhaconsulta.service.ConsultaService;
+import br.com.fiap.cademinhaconsulta.service.RiscoFaltaService;
 import br.com.fiap.cademinhaconsulta.service.TokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,14 +31,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/gestor")
 @RequiredArgsConstructor
-@Tag(name = "Gestor", description = "Agendamento pela fila, proximas consultas e registro de presenca (GESTOR)")
+@Tag(name = "Gestor", description = "Agendamento pela fila, proximas consultas, registro de presenca e risco de "
+        + "falta (GESTOR)")
 public class GestorController {
 
     private final AgendamentoService agendamentoService;
     private final ConsultaService consultaService;
+    private final RiscoFaltaService riscoFaltaService;
 
     // A procedure faz COMMIT proprio; a consulta criada e lida depois, numa transacao separada
     @PostMapping("/agendamentos")
@@ -54,6 +60,14 @@ public class GestorController {
             @RequestParam(defaultValue = "15") @Min(1) @Max(365) int dias,
             @ParameterObject @PageableDefault(size = 10) Pageable pageable) {
         return consultaService.listarProximas(dias, pageable);
+    }
+
+    // Excecao a paginacao (contrato, secao 6): array simples ordenado pela data da consulta
+    @GetMapping("/consultas/risco-falta")
+    @Operation(summary = "Risco de falta das consultas AGENDADA/CONFIRMADA nos proximos dias (array, ordenado por "
+            + "dataHora). Enquanto o modelo de ML nao estiver integrado, risco e nivel = null")
+    public List<RiscoFaltaResponse> listarRiscoFalta(@RequestParam(defaultValue = "15") @Min(1) @Max(365) int dias) {
+        return riscoFaltaService.listar(dias);
     }
 
     @PatchMapping("/consultas/{id}/presenca")
