@@ -5,7 +5,10 @@ import br.com.fiap.cademinhaconsulta.dto.ErroResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.hibernate.query.sqm.UnknownPathException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -62,6 +65,25 @@ public class GlobalExceptionHandler {
         return responder(HttpStatus.BAD_REQUEST, "Parametro invalido ou ausente na requisicao.", request);
     }
 
+    // ?sort= com campo inexistente (consultas derivadas e findAll)
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErroResponse> ordenacaoInvalida(PropertyReferenceException ex, HttpServletRequest request) {
+        return responder(HttpStatus.BAD_REQUEST, "Campo de ordenacao invalido: " + ex.getPropertyName() + ".", request);
+    }
+
+    // ?sort= com campo inexistente nas consultas com @Query: o Hibernate nao resolve o atributo.
+    // As @Query sao validadas na inicializacao, entao um caminho desconhecido aqui so pode vir do sort.
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    public ResponseEntity<ErroResponse> usoInvalidoConsulta(InvalidDataAccessApiUsageException ex,
+                                                            HttpServletRequest request) {
+        for (Throwable causa = ex; causa != null; causa = causa.getCause() == causa ? null : causa.getCause()) {
+            if (causa instanceof UnknownPathException) {
+                return responder(HttpStatus.BAD_REQUEST, "Campo de ordenacao invalido.", request);
+            }
+        }
+        return erroBanco(ex, request);
+    }
+
     @ExceptionHandler(CredenciaisInvalidasException.class)
     public ResponseEntity<ErroResponse> credenciaisInvalidas(CredenciaisInvalidasException ex, HttpServletRequest request) {
         return responder(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
@@ -75,6 +97,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErroResponse> acessoNegado(AccessDeniedException ex, HttpServletRequest request) {
         return responder(HttpStatus.FORBIDDEN, "Voce nao tem permissao para acessar este recurso.", request);
+    }
+
+    @ExceptionHandler(AcessoNegadoException.class)
+    public ResponseEntity<ErroResponse> acessoNegadoRecurso(AcessoNegadoException ex, HttpServletRequest request) {
+        return responder(HttpStatus.FORBIDDEN, ex.getMessage(), request);
     }
 
     @ExceptionHandler(RecursoNaoEncontradoException.class)

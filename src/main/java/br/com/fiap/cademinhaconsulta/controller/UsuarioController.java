@@ -2,6 +2,7 @@ package br.com.fiap.cademinhaconsulta.controller;
 
 import br.com.fiap.cademinhaconsulta.dto.UsuarioResponse;
 import br.com.fiap.cademinhaconsulta.dto.UsuarioUpdateRequest;
+import br.com.fiap.cademinhaconsulta.service.TokenService;
 import br.com.fiap.cademinhaconsulta.service.UsuarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,19 +27,13 @@ public class UsuarioController {
     @GetMapping("/me")
     @Operation(summary = "Dados do usuario do token")
     public UsuarioResponse buscarMe(@AuthenticationPrincipal Jwt jwt) {
-        return usuarioService.buscar(idUsuario(jwt));
+        return usuarioService.buscar(TokenService.idUsuario(jwt));
     }
 
     @PutMapping("/me")
     @Operation(summary = "Atualiza nome, contato e endereco do usuario do token")
     public UsuarioResponse atualizarMe(@AuthenticationPrincipal Jwt jwt,
                                        @RequestBody @Valid UsuarioUpdateRequest request) {
-        return usuarioService.atualizar(idUsuario(jwt), request);
-    }
-
-    // Claim "id" gerado pelo TokenService
-    private Long idUsuario(Jwt jwt) {
-        Number id = jwt.getClaim("id");
-        return id.longValue();
+        return usuarioService.atualizar(TokenService.idUsuario(jwt), request);
     }
 }
