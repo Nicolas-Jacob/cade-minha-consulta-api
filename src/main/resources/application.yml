@@ -26,6 +26,7 @@ spring:
     password: ${RABBITMQ_PASSWORD:guest}
     listener:
       simple:
+        # Mensagem com erro e descartada, nunca volta para a fila (sem reprocessar em loop)
         default-requeue-rejected: false
 
   ai:
@@ -52,7 +53,4 @@ management:
     web:
       exposure:
         include: health
-  health:
-    # Desligado ate a etapa de mensageria, para o health nao ficar DOWN sem broker
-    rabbit:
-      enabled: false
+  # O health do RabbitMQ esta ligado (padrao): com o broker fora do ar, /actuator/health responde DOWN
