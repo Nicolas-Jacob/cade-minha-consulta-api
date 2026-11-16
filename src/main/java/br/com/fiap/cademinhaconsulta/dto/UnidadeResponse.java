@@ -24,7 +24,7 @@ public record UnidadeResponse(
     }
 
     // "Logradouro, 110 - Bairro, Cidade/UF"
-    private static String formatar(Endereco e) {
+    public static String formatar(Endereco e) {
         return "%s, %d - %s, %s/%s".formatted(e.getLogradouro(), e.getNumero(), e.getBairro(), e.getCidade(), e.getUf());
     }
 }

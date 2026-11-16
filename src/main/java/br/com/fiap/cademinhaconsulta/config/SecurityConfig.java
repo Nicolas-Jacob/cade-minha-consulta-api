@@ -48,6 +48,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/filas/*").hasRole("CIDADAO")
                         .requestMatchers(HttpMethod.GET, "/api/filas").hasRole("GESTOR")
                         .requestMatchers(HttpMethod.PATCH, "/api/filas/*/prioridade").hasRole("GESTOR")
+                        // Consultas: GET /api/consultas/{id} (dono ou GESTOR) e validado no ConsultaService
+                        .requestMatchers(HttpMethod.GET, "/api/consultas/minhas").hasRole("CIDADAO")
+                        .requestMatchers(HttpMethod.PATCH, "/api/consultas/*/confirmar", "/api/consultas/*/cancelar")
+                        .hasRole("CIDADAO")
+                        .requestMatchers("/api/gestor/**").hasRole("GESTOR")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

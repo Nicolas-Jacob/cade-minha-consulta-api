@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface UsuarioContatoEnderecoRepository extends JpaRepository<UsuarioContatoEndereco, UsuarioContatoEnderecoId> {
@@ -18,4 +19,13 @@ public interface UsuarioContatoEnderecoRepository extends JpaRepository<UsuarioC
             order by v.contato.id
             """)
     List<UsuarioContatoEndereco> buscarVinculosDoUsuario(@Param("idUsuario") Long idUsuario);
+
+    // Contatos de varios usuarios numa consulta so (telefone do paciente numa pagina de consultas)
+    @Query("""
+            select v from UsuarioContatoEndereco v
+            join fetch v.contato
+            where v.usuario.id in :idsUsuarios
+            order by v.contato.id
+            """)
+    List<UsuarioContatoEndereco> buscarVinculosDosUsuarios(@Param("idsUsuarios") Collection<Long> idsUsuarios);
 }
