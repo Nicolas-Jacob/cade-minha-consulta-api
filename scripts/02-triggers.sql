@@ -191,7 +191,6 @@ END;
 
 
 -- Regra de negocio: consultas AGENDADA ou CONFIRMADA, e cancelamentos futuros, precisam manter data futura.
--- Usa o codigo -20007 para nao colidir com o -20003 ("fila vazia") da PRC_AGENDAR_CONSULTA.
 CREATE OR REPLACE TRIGGER TRG_GS_CONSULTA_FUTURA
 BEFORE INSERT OR UPDATE ON TB_GS_CONSULTA
 FOR EACH ROW
@@ -201,3 +200,9 @@ BEGIN
     END IF;
 END;
 /
+
+
+
+
+
+
