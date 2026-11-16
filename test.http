@@ -488,6 +488,32 @@ PATCH {{baseUrl}}/api/consultas/{{idConsultaOutro}}/confirmar
 Authorization: Bearer {{loginGestor.response.body.token}}
 
 # =====================================================================
+# ORIENTACOES DA CONSULTA (Spring AI)
+# Com AI_API_KEY no .env: origem "IA". Sem chave ou com a IA fora do ar: origem "PADRAO" (sempre 200).
+# @idConsultaCidadao: consulta do usuario cidadao (na carga e a de id 2; confira em /consultas/minhas)
+# =====================================================================
+@idConsultaCidadao = 2
+
+### Orientacoes da consulta do cidadao (dono; 200)
+GET {{baseUrl}}/api/consultas/{{idConsultaCidadao}}/orientacoes
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Orientacoes da mesma consulta como GESTOR (200)
+GET {{baseUrl}}/api/consultas/{{idConsultaCidadao}}/orientacoes
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Orientacoes da consulta de outro cidadao (403)
+GET {{baseUrl}}/api/consultas/{{idConsultaOutro}}/orientacoes
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Orientacoes de consulta inexistente (404)
+GET {{baseUrl}}/api/consultas/999999/orientacoes
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Orientacoes sem token (401)
+GET {{baseUrl}}/api/consultas/{{idConsultaCidadao}}/orientacoes
+
+# =====================================================================
 # GESTOR: agendamento, proximas consultas e presenca
 # =====================================================================
 @idMedicoComFila = 1
@@ -546,4 +572,25 @@ Content-Type: application/json
 
 ### Cidadao acessando rota do gestor (403)
 GET {{baseUrl}}/api/gestor/consultas/proximas
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+# =====================================================================
+# GESTOR: risco de falta (FN_DADOS_PREVISAO_FALTA + RiscoFaltaClient)
+# Excecao a paginacao: array simples ordenado por dataHora. risco e nivel = null enquanto o modelo nao existe.
+# =====================================================================
+
+### Risco de falta nos proximos 15 dias (200)
+GET {{baseUrl}}/api/gestor/consultas/risco-falta?dias=15
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Risco de falta sem "dias" (padrao 15)
+GET {{baseUrl}}/api/gestor/consultas/risco-falta
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### dias invalido (400)
+GET {{baseUrl}}/api/gestor/consultas/risco-falta?dias=0
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Cidadao no risco de falta (403)
+GET {{baseUrl}}/api/gestor/consultas/risco-falta
 Authorization: Bearer {{loginCidadao.response.body.token}}

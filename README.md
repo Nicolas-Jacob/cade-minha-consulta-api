@@ -12,7 +12,7 @@ No SUS, cerca de 1 em cada 4 pacientes falta à consulta com especialista sem av
 - Quando uma vaga é liberada, o sistema **agenda automaticamente** o próximo paciente compatível da fila.
 - O **gestor** da unidade agenda pacientes da fila para médicos, acompanha as próximas consultas e registra presença ou falta.
 - A **IA generativa** escreve lembretes e orientações de preparo em linguagem simples.
-- Um modelo de **ML** prevê o risco de falta (integrado em etapa posterior).
+- Um modelo de **ML** prevê o risco de falta. A API já tem o ponto de integração; o modelo, feito por outro integrante, entra depois.
 
 O contrato completo entre a API e o app mobile está em [docs/CONTRATO_API.md](docs/CONTRATO_API.md).
 
@@ -36,7 +36,7 @@ O contrato completo entre a API e o app mobile está em [docs/CONTRATO_API.md](d
 - Java 21
 - Acesso a um banco Oracle
 - Docker, para o RabbitMQ (ver o passo 3). Sem o broker a API sobe normalmente, mas a vaga liberada não é realocada automaticamente.
-- (Opcional nesta etapa) Uma chave da OpenAI. A API sobe sem ela.
+- (Opcional) Uma chave da OpenAI. Sem ela, a API sobe e as orientações usam o texto padrão (ver [IA generativa](#ia-generativa-spring-ai)).
 
 ### 1. Criar o banco
 
@@ -110,6 +110,48 @@ As mensagens trafegam em JSON (`JacksonJsonMessageConverter`). Exchange, fila e 
 
 **Limitação conhecida:** a procedure agenda no primeiro horário útil livre do médico a partir de `SYSDATE + 5` (8h–17h, seg–sex), para o paciente ter pelo menos cinco dias de aviso. Por isso, o próximo paciente nem sempre ocupa exatamente o horário que foi liberado: se a consulta cancelada era nos próximos cinco dias, aquele horário fica livre.
 
+## IA generativa (Spring AI)
+
+`GET /api/consultas/{id}/orientacoes` devolve uma orientação curta para o paciente sobre **aquela consulta**. A rota não é um chat livre: o texto é gerado a partir dos dados da consulta, dentro do fluxo de acompanhamento do app. Acesso: o dono da consulta ou o GESTOR. Outro cidadão recebe 403 e consulta inexistente, 404.
+
+**Como funciona** (`OrientacaoService`, com o `ChatClient` do Spring AI):
+
+1. O `ConsultaService.dadosParaOrientacao` valida o acesso e monta um `DadosOrientacao` só com os campos permitidos.
+2. O prompt é montado a partir de templates em [src/main/resources/prompts/](src/main/resources/prompts/), não no código:
+   - `orientacao-sistema.st` (mensagem de sistema): português do Brasil, linguagem simples para quem usa o SUS, tom acolhedor, no máximo 150 palavras e texto puro sem markdown (listas com "• "). Conteúdo: lembrete da consulta, o que levar (documento com foto, cartão do SUS, exames e receitas anteriores), chegar com antecedência, cuidados gerais de preparo da especialidade e o pedido de liberar a vaga pelo app se não puder ir. Restrições: **nunca diagnosticar, nunca recomendar ou alterar medicamentos e não inventar dados** (nome do médico, exames específicos etc.). Se a consulta estiver cancelada ou encerrada, só informa a situação.
+   - `orientacao-usuario.st` (mensagem do usuário): os dados da consulta.
+3. A resposta traz `origem` (`IA` ou `PADRAO`) e o `aviso` correspondente: "Orientação gerada por IA. Não substitui a orientação médica." ou "Orientações gerais. Não substituem a orientação médica.".
+
+**O que vai no prompt:** especialidade e descrição, data e hora (por extenso, com o dia da semana), dias até a consulta, nome e endereço da unidade de saúde, primeiro nome do paciente e situação da consulta.
+
+**Minimização de dados (LGPD):** o modelo **não** recebe CPF, telefone, e-mail, endereço do paciente, sobrenome nem os outros nomes do paciente, nem o nome dos pais ou o login. A garantia está no tipo: `DadosOrientacao` simplesmente não tem esses campos. O `OrientacaoServiceTest` confere que o prompt enviado não contém esses dados.
+
+**Fallback:** a API nunca devolve 500 por causa da IA. Nestes casos ela devolve um texto padrão montado com os mesmos dados (`orientacao-padrao.st`, ou `orientacao-padrao-encerrada.st` para consulta cancelada ou passada), com `origem: "PADRAO"`, e registra o motivo no log:
+
+- `AI_API_KEY` vazia ou não definida: a IA nem é chamada;
+- erro na chamada (chave inválida, rede, limite de uso etc.);
+- sem resposta em 20 s (`orientacao.timeout-segundos`; o SDK também usa `timeout: 20s` e não faz novas tentativas);
+- resposta vazia.
+
+**Limitações:** o texto é gerado por um modelo de linguagem e **pode conter erros ou imprecisões**. A IA **não diagnostica e não substitui a orientação médica**: as orientações de preparo são gerais, e o paciente deve seguir o que a unidade e o médico indicarem. O app mostra o `aviso` junto do texto. Cada chamada gera um texto novo, que não fica salvo, e consome a cota da chave da OpenAI.
+
+## Risco de falta
+
+`GET /api/gestor/consultas/risco-falta?dias=15` (só GESTOR) lista as consultas AGENDADA ou CONFIRMADA dos próximos `dias` (1 a 365) com o risco de falta de cada uma. Pelo contrato, é uma **exceção à paginação**: devolve um array simples de `RiscoFaltaResponse`, ordenado pela data da consulta.
+
+**Fluxo** (`RiscoFaltaService`):
+
+1. Chama a função `PKG_GS_CONSULTA_DADOS.FN_DADOS_PREVISAO_FALTA(p_dias)` via `SimpleJdbcCall`. Ela devolve um `SYS_REFCURSOR`, e cada linha vira um `DadosPrevisaoFalta` com os atributos do modelo: dias até a consulta, dia da semana, hora e turno, idade do paciente, prioridade da fila, especialidade, unidade, faltas, presenças e cancelamentos anteriores, e taxa histórica de faltas.
+2. Envia a lista ao `RiscoFaltaClient.prever(...)`, que devolve uma `PrevisaoRisco { idConsulta, risco (0 a 1), nivel (BAIXO/MEDIO/ALTO) }` por consulta.
+3. Junta o nome do paciente, buscado na API. O nome não vem do cursor e não vai para o modelo.
+
+**Ponto de integração com o modelo de ML:** o `RiscoFaltaConfig` escolhe a implementação pela variável `RISCO_FALTA_URL` (propriedade `risco-falta.url`):
+
+- vazia (padrão): `StubRiscoFaltaClient`, que devolve `risco` e `nivel` null para todas as consultas;
+- preenchida: é onde entra o cliente HTTP real (um `HttpRiscoFaltaClient` com `RestClient`, que envia os atributos ao serviço do modelo e lê as previsões). Esse cliente ainda não foi implementado: por enquanto, a API registra um aviso no log e continua usando o stub.
+
+Para integrar o modelo, basta implementar `RiscoFaltaClient` e devolver o novo cliente no `RiscoFaltaConfig`. O service, o controller e o contrato não mudam.
+
 ## Endpoints
 
 Papéis: **pub** = público; **logado** = qualquer usuário autenticado; **CID** = CIDADAO; **GES** = GESTOR; **dono** = o recurso (solicitação ou consulta) pertence ao usuário do token.
@@ -165,6 +207,7 @@ Todo GET de lista é paginado (`?page=0&size=10&sort=campo,asc`) e devolve `cont
 | GET | `/api/consultas/{id}` | CID dono ou GES | Outro cidadão recebe 403. O GES recebe também `paciente` |
 | PATCH | `/api/consultas/{id}/confirmar` | CID dono | AGENDADA futura → CONFIRMADA (senão 409) |
 | PATCH | `/api/consultas/{id}/cancelar` | CID dono | AGENDADA/CONFIRMADA futura → CANCELADA (senão 409). A fila vira CANCELADA e o evento `vaga.liberada` é publicado após o commit |
+| GET | `/api/consultas/{id}/orientacoes` | CID dono ou GES | Orientações da consulta com Spring AI. `origem` IA ou PADRAO (texto padrão se a IA estiver indisponível). Ver [IA generativa](#ia-generativa-spring-ai) |
 
 `ConsultaResponse` traz `diasAteConsulta` (dias de calendário até a consulta; 0 se já passou), o médico com nome completo e CRM, e a unidade com o endereço formatado.
 
@@ -175,6 +218,7 @@ Todo GET de lista é paginado (`?page=0&size=10&sort=campo,asc`) e devolve `cont
 | POST | `/api/gestor/agendamentos` | GES | Body `{idMedico}`. Chama `PRC_AGENDAR_CONSULTA` e devolve 201 com a consulta criada (com `paciente`). Erros da procedure: 404 médico inexistente, 409 inativo/sem horário/fila alterada, 422 fila vazia |
 | GET | `/api/gestor/consultas/proximas?dias=15` | GES | AGENDADA/CONFIRMADA nos próximos `dias` (1 a 365), padrão `sort=dataHora,asc`, com `paciente` (nome e telefone) |
 | PATCH | `/api/gestor/consultas/{id}/presenca` | GES | Body `{status: "PRESENTE" \| "FALTA"}`. Só AGENDADA/CONFIRMADA com data passada (senão 409) |
+| GET | `/api/gestor/consultas/risco-falta?dias=15` | GES | Exceção à paginação: array de `RiscoFaltaResponse` ordenado por data. `risco` e `nivel` null até o modelo de ML ser integrado. Ver [Risco de falta](#risco-de-falta) |
 
 ### Infra
 
@@ -191,13 +235,14 @@ Todo GET de lista é paginado (`?page=0&size=10&sort=campo,asc`) e devolve `cont
 | `DB_USERNAME` | Usuário do banco | |
 | `DB_PASSWORD` | Senha do banco | |
 | `JWT_SECRET` | Chave de assinatura do JWT (HS256), com no mínimo 32 caracteres | |
-| `AI_API_KEY` | Chave da API da OpenAI | |
+| `AI_API_KEY` | Chave da API da OpenAI. Vazia = orientações com o texto padrão | |
 | `AI_BASE_URL` | URL base da API de IA | `https://api.openai.com/v1` |
 | `AI_MODEL` | Modelo de chat | `gpt-4o-mini` |
 | `RABBITMQ_HOST` | Host do RabbitMQ | `localhost` |
 | `RABBITMQ_PORT` | Porta do RabbitMQ | `5672` |
 | `RABBITMQ_USERNAME` | Usuário do RabbitMQ | `guest` |
 | `RABBITMQ_PASSWORD` | Senha do RabbitMQ | `guest` |
+| `RISCO_FALTA_URL` | URL do serviço do modelo de risco de falta. Vazio = stub (risco null) | |
 
 ## Usuários de teste
 
