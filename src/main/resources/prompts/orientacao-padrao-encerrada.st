@@ -1,0 +1,1 @@
+Olá, {primeiroNome}! Sua consulta de {especialidade} de {dataHora}, na unidade {unidade}, está {status}. Se precisar de atendimento nessa especialidade, você pode solicitar uma nova consulta pelo app.

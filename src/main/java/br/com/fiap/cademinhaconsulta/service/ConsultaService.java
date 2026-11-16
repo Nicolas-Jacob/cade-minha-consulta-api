@@ -1,6 +1,7 @@
 package br.com.fiap.cademinhaconsulta.service;
 
 import br.com.fiap.cademinhaconsulta.dto.ConsultaResponse;
+import br.com.fiap.cademinhaconsulta.dto.DadosOrientacao;
 import br.com.fiap.cademinhaconsulta.dto.PaginaResponse;
 import br.com.fiap.cademinhaconsulta.dto.PresencaRequest;
 import br.com.fiap.cademinhaconsulta.dto.UnidadeResponse;
@@ -12,6 +13,7 @@ import br.com.fiap.cademinhaconsulta.exception.ConflitoException;
 import br.com.fiap.cademinhaconsulta.exception.RecursoNaoEncontradoException;
 import br.com.fiap.cademinhaconsulta.messaging.VagaLiberadaEvent;
 import br.com.fiap.cademinhaconsulta.model.Consulta;
+import br.com.fiap.cademinhaconsulta.model.Especialidade;
 import br.com.fiap.cademinhaconsulta.model.Fila;
 import br.com.fiap.cademinhaconsulta.model.UnidadeContatoEndereco;
 import br.com.fiap.cademinhaconsulta.model.UsuarioContatoEndereco;
@@ -67,6 +69,27 @@ public class ConsultaService {
             validarDono(consulta, idUsuario);
         }
         return montarResposta(consulta, gestor);
+    }
+
+    // Dados para as orientacoes da IA (dono ou GESTOR; 404 e 403 como em buscar).
+    // So os campos permitidos de DadosOrientacao saem daqui: nada de CPF, telefone, e-mail, endereco ou sobrenome.
+    @Transactional(readOnly = true)
+    public DadosOrientacao dadosParaOrientacao(Long id, Long idUsuario, boolean gestor) {
+        Consulta consulta = buscarConsulta(id);
+        if (!gestor) {
+            validarDono(consulta, idUsuario);
+        }
+        Especialidade especialidade = consulta.getFila().getEspecialidade();
+        return new DadosOrientacao(
+                consulta.getId(),
+                primeiroNome(consulta.getUsuario().getNome()),
+                especialidade.getNome(),
+                especialidade.getDescricao(),
+                consulta.getDataHora(),
+                ConsultaResponse.diasAte(consulta.getDataHora()),
+                consulta.getUnidade().getNome(),
+                buscarEnderecos(List.of(consulta)).get(consulta.getUnidade().getId()),
+                consulta.getStatus());
     }
 
     // AGENDADA e futura -> CONFIRMADA
@@ -138,6 +161,11 @@ public class ConsultaService {
         if (!consulta.getUsuario().getId().equals(idUsuario)) {
             throw new AcessoNegadoException("Esta consulta pertence a outro usuario.");
         }
+    }
+
+    // nome_usuario pode ter mais de um nome ("Maria Clara"): so o primeiro vai para a IA
+    private static String primeiroNome(String nome) {
+        return nome.trim().split("\\s+")[0];
     }
 
     private static boolean ehFutura(Consulta consulta) {

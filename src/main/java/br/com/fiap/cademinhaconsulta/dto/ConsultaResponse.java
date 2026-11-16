@@ -56,7 +56,7 @@ public record ConsultaResponse(
     }
 
     // Dias de calendario entre hoje e a data da consulta; consultas passadas ficam com 0
-    private static long diasAte(LocalDateTime dataHora) {
+    public static long diasAte(LocalDateTime dataHora) {
         return Math.max(0, ChronoUnit.DAYS.between(LocalDate.now(), dataHora.toLocalDate()));
     }
 }
