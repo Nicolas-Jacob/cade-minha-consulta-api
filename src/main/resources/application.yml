@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: cademinhaconsulta
+
+  # Le as variaveis do arquivo .env (se existir) na raiz do projeto
+  config:
+    import: optional:file:.env[.properties]
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+
+  jpa:
+    # O schema vem dos scripts em /scripts. O Hibernate nunca cria ou altera tabelas.
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: false
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        default-requeue-rejected: false
+
+  ai:
+    openai:
+      # Placeholder apenas para a aplicacao subir sem chave configurada (nao e credencial)
+      api-key: ${AI_API_KEY:nao-configurada}
+      base-url: ${AI_BASE_URL:https://api.openai.com/v1}
+      chat:
+        options:
+          model: ${AI_MODEL:gpt-4o-mini}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-seconds: 28800
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  health:
+    # Desligado ate a etapa de mensageria, para o health nao ficar DOWN sem broker
+    rabbit:
+      enabled: false
