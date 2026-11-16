@@ -3,6 +3,7 @@ package br.com.fiap.cademinhaconsulta.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -37,6 +38,16 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Catalogo: leitura para qualquer logado; escrita e medicos so GESTOR
+                        .requestMatchers(HttpMethod.GET, "/api/especialidades/**", "/api/unidades/**").authenticated()
+                        .requestMatchers("/api/especialidades/**", "/api/unidades/**", "/api/medicos/**").hasRole("GESTOR")
+                        // Fila: /minhas antes de /{id}. GET /api/filas/{id} (dono ou GESTOR) e validado no FilaService
+                        .requestMatchers(HttpMethod.GET, "/api/filas/minhas").hasRole("CIDADAO")
+                        .requestMatchers(HttpMethod.POST, "/api/filas").hasRole("CIDADAO")
+                        .requestMatchers(HttpMethod.PUT, "/api/filas/*").hasRole("CIDADAO")
+                        .requestMatchers(HttpMethod.DELETE, "/api/filas/*").hasRole("CIDADAO")
+                        .requestMatchers(HttpMethod.GET, "/api/filas").hasRole("GESTOR")
+                        .requestMatchers(HttpMethod.PATCH, "/api/filas/*/prioridade").hasRole("GESTOR")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
