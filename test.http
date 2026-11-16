@@ -106,3 +106,314 @@ Content-Type: application/json
 
 ### Sem token (401)
 GET {{baseUrl}}/api/usuarios/me
+
+# =====================================================================
+# CATALOGO: ESPECIALIDADES
+# Rode antes o loginGestor e o loginCidadao (la em cima).
+# =====================================================================
+
+### Listar especialidades (paginado; padrao size=10, sort=nome,asc)
+GET {{baseUrl}}/api/especialidades?page=0&size=5&sort=nome,asc
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Buscar especialidade por id
+GET {{baseUrl}}/api/especialidades/1
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Criar especialidade (GESTOR, 201)
+# @name criarEspecialidade
+POST {{baseUrl}}/api/especialidades
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Especialidade Teste",
+  "descricao": "Criada pelo test.http"
+}
+
+### Atualizar especialidade (GESTOR)
+PUT {{baseUrl}}/api/especialidades/{{criarEspecialidade.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Especialidade Teste 2",
+  "descricao": "Editada pelo test.http"
+}
+
+### Excluir especialidade criada acima (GESTOR, 204)
+DELETE {{baseUrl}}/api/especialidades/{{criarEspecialidade.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Excluir especialidade em uso por medico ou fila (409)
+DELETE {{baseUrl}}/api/especialidades/1
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Cidadao tentando criar especialidade (403)
+POST {{baseUrl}}/api/especialidades
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Nao pode",
+  "descricao": "Cidadao nao e gestor"
+}
+
+### Ordenacao por campo inexistente (400)
+GET {{baseUrl}}/api/especialidades?sort=xpto
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+# =====================================================================
+# CATALOGO: UNIDADES
+# =====================================================================
+
+### Listar unidades como cidadao (so ATIVO; o filtro status e ignorado)
+GET {{baseUrl}}/api/unidades
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Unidades com medico ATIVO da especialidade 1
+GET {{baseUrl}}/api/unidades?especialidade=1
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Listar unidades como gestor, filtrando por status
+GET {{baseUrl}}/api/unidades?status=INATIVO
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Buscar unidade por id
+GET {{baseUrl}}/api/unidades/1
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Criar unidade com contato e endereco (GESTOR, 201; status opcional, padrao ATIVO)
+# @name criarUnidade
+POST {{baseUrl}}/api/unidades
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Unidade Teste",
+  "telefone": "1133334444",
+  "email": "unidade.teste@saude.com",
+  "endereco": {
+    "cep": "01310100",
+    "logradouro": "Avenida Paulista",
+    "numero": 2000,
+    "complemento": null,
+    "bairro": "Bela Vista",
+    "cidade": "Sao Paulo",
+    "uf": "SP"
+  }
+}
+
+### Atualizar unidade, contato e endereco (GESTOR)
+PUT {{baseUrl}}/api/unidades/{{criarUnidade.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Unidade Teste Editada",
+  "telefone": "11999998888",
+  "email": null,
+  "endereco": {
+    "cep": "01001000",
+    "logradouro": "Praca da Se",
+    "numero": 10,
+    "complemento": "Sala 2",
+    "bairro": "Se",
+    "cidade": "Sao Paulo",
+    "uf": "SP"
+  }
+}
+
+### Inativar unidade (GESTOR, 204)
+DELETE {{baseUrl}}/api/unidades/{{criarUnidade.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Cidadao buscando unidade INATIVO (404)
+GET {{baseUrl}}/api/unidades/{{criarUnidade.response.body.id}}
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Reativar unidade pelo PUT com status (GESTOR)
+PUT {{baseUrl}}/api/unidades/{{criarUnidade.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Unidade Teste Editada",
+  "telefone": "11999998888",
+  "endereco": {
+    "cep": "01001000",
+    "logradouro": "Praca da Se",
+    "numero": 10,
+    "bairro": "Se",
+    "cidade": "Sao Paulo",
+    "uf": "SP"
+  },
+  "status": "ATIVO"
+}
+
+# =====================================================================
+# CATALOGO: MEDICOS (so GESTOR)
+# =====================================================================
+
+### Listar medicos com filtros opcionais
+GET {{baseUrl}}/api/medicos?especialidade=1&unidade=1
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Buscar medico por id
+GET {{baseUrl}}/api/medicos/1
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Criar medico (201). Troque o CRM para rodar de novo (senao 409).
+# @name criarMedico
+POST {{baseUrl}}/api/medicos
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Paula",
+  "sobrenome": "Teste",
+  "crm": "CRM0000001",
+  "ufCrm": "SP",
+  "idsEspecialidades": [1, 2],
+  "idsUnidades": [1]
+}
+
+### Mesmo CRM na mesma UF (409)
+POST {{baseUrl}}/api/medicos
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Outro",
+  "sobrenome": "Medico",
+  "crm": "CRM0000001",
+  "ufCrm": "SP",
+  "idsEspecialidades": [1],
+  "idsUnidades": [1]
+}
+
+### Especialidade inexistente (404)
+POST {{baseUrl}}/api/medicos
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Outro",
+  "sobrenome": "Medico",
+  "crm": "CRM0000002",
+  "ufCrm": "SP",
+  "idsEspecialidades": [999999],
+  "idsUnidades": [1]
+}
+
+### Atualizar medico, especialidades e unidades
+PUT {{baseUrl}}/api/medicos/{{criarMedico.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Paula",
+  "sobrenome": "Teste Editada",
+  "crm": "CRM0000001",
+  "ufCrm": "SP",
+  "idsEspecialidades": [3],
+  "idsUnidades": [1, 2]
+}
+
+### Inativar medico (204)
+DELETE {{baseUrl}}/api/medicos/{{criarMedico.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Cidadao listando medicos (403)
+GET {{baseUrl}}/api/medicos
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+# =====================================================================
+# FILAS (solicitacoes de consulta)
+# =====================================================================
+
+### Criar solicitacao (CIDADAO, 201): prioridade 1, AGUARDANDO
+# @name criarFila
+POST {{baseUrl}}/api/filas
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "idEspecialidade": 3,
+  "idUnidade": 3
+}
+
+### Mesma especialidade de novo enquanto AGUARDANDO (409)
+POST {{baseUrl}}/api/filas
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "idEspecialidade": 3,
+  "idUnidade": 1
+}
+
+### Especialidade inexistente (404)
+POST {{baseUrl}}/api/filas
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "idEspecialidade": 999999,
+  "idUnidade": 1
+}
+
+### Minhas solicitacoes (CIDADAO; posicaoEstimada so nas AGUARDANDO)
+GET {{baseUrl}}/api/filas/minhas
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Buscar a solicitacao (dono)
+GET {{baseUrl}}/api/filas/{{criarFila.response.body.id}}
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Buscar a solicitacao (GESTOR)
+GET {{baseUrl}}/api/filas/{{criarFila.response.body.id}}
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Trocar a unidade (dono; so AGUARDANDO)
+PUT {{baseUrl}}/api/filas/{{criarFila.response.body.id}}
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "idUnidade": 1
+}
+
+### Alterar prioridade (GESTOR, 1 a 5)
+PATCH {{baseUrl}}/api/filas/{{criarFila.response.body.id}}/prioridade
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "prioridade": 4
+}
+
+### Prioridade fora da faixa (400)
+PATCH {{baseUrl}}/api/filas/{{criarFila.response.body.id}}/prioridade
+Authorization: Bearer {{loginGestor.response.body.token}}
+Content-Type: application/json
+
+{
+  "prioridade": 9
+}
+
+### Desistir (dono, 204): status CANCELADA + data_saida
+DELETE {{baseUrl}}/api/filas/{{criarFila.response.body.id}}
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Desistir de novo (409: nao esta mais AGUARDANDO)
+DELETE {{baseUrl}}/api/filas/{{criarFila.response.body.id}}
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Listar filas com filtros (GESTOR; padrao prioridade,desc e dataEntrada,asc)
+GET {{baseUrl}}/api/filas?status=AGUARDANDO&especialidade=3&unidade=3
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Cidadao listando todas as filas (403)
+GET {{baseUrl}}/api/filas
+Authorization: Bearer {{loginCidadao.response.body.token}}

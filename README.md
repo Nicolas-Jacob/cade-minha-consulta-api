@@ -71,6 +71,60 @@ Na primeira execução, o `SenhaHashRunner` converte para BCrypt as senhas em te
 - Health: http://localhost:8080/actuator/health
 - Arquivo [test.http](test.http) com exemplos de requisições (extensão REST Client do VS Code).
 
+## Endpoints
+
+Papéis: **pub** = público; **logado** = qualquer usuário autenticado; **CID** = CIDADAO; **GES** = GESTOR; **dono** = a solicitação pertence ao usuário do token.
+
+Todo GET de lista é paginado (`?page=0&size=10&sort=campo,asc`) e devolve `content`, `totalElements`, `totalPages`, `number` e `size`. Erros seguem o formato padrão da seção 5 do [contrato](docs/CONTRATO_API.md).
+
+### Auth e usuário
+
+| Método | Rota | Papel | Observação |
+|---|---|---|---|
+| POST | `/api/auth/register` | pub | Cadastra cidadão e devolve o token (201) |
+| POST | `/api/auth/login` | pub | Devolve o token JWT |
+| GET | `/api/usuarios/me` | logado | Dados do usuário do token |
+| PUT | `/api/usuarios/me` | logado | Atualiza nome, contato e endereço |
+
+### Catálogo
+
+| Método | Rota | Papel | Observação |
+|---|---|---|---|
+| GET | `/api/especialidades` | logado | Padrão `sort=nome,asc` |
+| GET | `/api/especialidades/{id}` | logado | |
+| POST | `/api/especialidades` | GES | 201 |
+| PUT | `/api/especialidades/{id}` | GES | |
+| DELETE | `/api/especialidades/{id}` | GES | 204. 409 se estiver em uso por médico ou fila |
+| GET | `/api/unidades?status=&especialidade=` | logado | Padrão `sort=nome,asc`. CID só vê ATIVO; `status` só vale para o GES. `especialidade`: só unidades com médico ATIVO dessa especialidade |
+| GET | `/api/unidades/{id}` | logado | CID recebe 404 se a unidade estiver INATIVO |
+| POST | `/api/unidades` | GES | 201. Grava contato e endereço. `status` opcional (padrão ATIVO) |
+| PUT | `/api/unidades/{id}` | GES | Atualiza contato e endereço. `status` opcional (permite reativar) |
+| DELETE | `/api/unidades/{id}` | GES | 204. Status INATIVO |
+| GET | `/api/medicos?especialidade=&unidade=` | GES | Padrão `sort=nome,sobrenome,asc` |
+| GET | `/api/medicos/{id}` | GES | |
+| POST | `/api/medicos` | GES | 201. 409 se o CRM já existir na mesma UF. `status` opcional (padrão ATIVO) |
+| PUT | `/api/medicos/{id}` | GES | Atualiza especialidades e unidades. `status` opcional (permite reativar) |
+| DELETE | `/api/medicos/{id}` | GES | 204. Status INATIVO |
+
+### Fila (solicitações de consulta)
+
+| Método | Rota | Papel | Observação |
+|---|---|---|---|
+| POST | `/api/filas` | CID | 201. Prioridade 1, AGUARDANDO. 404 especialidade/unidade inexistente, 422 unidade inativa, 409 se já houver solicitação AGUARDANDO para a especialidade |
+| GET | `/api/filas/minhas` | CID | Padrão `sort=dataEntrada,desc`. `posicaoEstimada` só nas AGUARDANDO |
+| GET | `/api/filas/{id}` | CID dono ou GES | Outro cidadão recebe 403 |
+| PUT | `/api/filas/{id}` | CID dono | Troca a unidade. Só AGUARDANDO (senão 409) |
+| DELETE | `/api/filas/{id}` | CID dono | 204. Desistência: CANCELADA + data de saída. Só AGUARDANDO (senão 409) |
+| GET | `/api/filas?status=&especialidade=&unidade=` | GES | Padrão `sort=prioridade,desc` e `dataEntrada,asc` (ordem real da fila) |
+| PATCH | `/api/filas/{id}/prioridade` | GES | Prioridade de 1 a 5. Só AGUARDANDO (senão 409) |
+
+### Infra
+
+| Método | Rota | Papel |
+|---|---|---|
+| GET | `/actuator/health` | pub |
+| GET | `/swagger-ui.html` | pub |
+
 ## Variáveis de ambiente
 
 | Variável | Descrição | Exemplo |
