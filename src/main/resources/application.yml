@@ -34,9 +34,21 @@ spring:
       # Placeholder apenas para a aplicacao subir sem chave configurada (nao e credencial)
       api-key: ${AI_API_KEY:nao-configurada}
       base-url: ${AI_BASE_URL:https://api.openai.com/v1}
+      # O OrientacaoService ja limita a chamada a orientacao.timeout-segundos e cai no texto padrao;
+      # sem novas tentativas, para a resposta nao passar desse limite
+      timeout: 20s
+      max-retries: 0
       chat:
         options:
           model: ${AI_MODEL:gpt-4o-mini}
+
+# Orientacoes da consulta (Spring AI): passado esse tempo, devolve o texto padrao (origem PADRAO)
+orientacao:
+  timeout-segundos: 20
+
+# Modelo de ML de risco de falta. Vazio = StubRiscoFaltaClient (risco e nivel null)
+risco-falta:
+  url: ${RISCO_FALTA_URL:}
 
 jwt:
   secret: ${JWT_SECRET}
