@@ -1,0 +1,108 @@
+### Testes manuais da API (extensao REST Client do VS Code)
+@baseUrl = http://localhost:8080
+
+### Health (publico)
+GET {{baseUrl}}/actuator/health
+
+### Login do gestor (carga de dados)
+# @name loginGestor
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "gestor",
+  "senha": "SenhaGestor2026"
+}
+
+### Login do cidadao de teste (carga de dados)
+# @name loginCidadao
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "cidadao",
+  "senha": "Senha123"
+}
+
+### Login com senha errada (401)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "gestor",
+  "senha": "errada"
+}
+
+### Cadastro de cidadao (201). Troque cpf e login para rodar de novo (senao 409).
+# @name register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "nome": "Maria",
+  "sobrenome": "Teste da Silva",
+  "cpf": "12345678901",
+  "sexo": "F",
+  "dataNascimento": "1990-05-10",
+  "nomeMae": "Ana da Silva",
+  "nomePai": "Jose da Silva",
+  "login": "maria.teste",
+  "senha": "Senha123",
+  "telefone": "11987654321",
+  "email": "maria.teste@email.com",
+  "endereco": {
+    "cep": "01310100",
+    "logradouro": "Avenida Paulista",
+    "numero": 1000,
+    "complemento": "Apto 12",
+    "bairro": "Bela Vista",
+    "cidade": "Sao Paulo",
+    "uf": "SP"
+  }
+}
+
+### Cadastro invalido (400 com "campos")
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "nome": "",
+  "cpf": "123",
+  "sexo": "X",
+  "login": "x",
+  "senha": "1",
+  "telefone": "1",
+  "endereco": { "cep": "1", "uf": "XX", "numero": 0 }
+}
+
+### Meus dados com o token do gestor
+GET {{baseUrl}}/api/usuarios/me
+Authorization: Bearer {{loginGestor.response.body.token}}
+
+### Meus dados com o token do cidadao
+GET {{baseUrl}}/api/usuarios/me
+Authorization: Bearer {{loginCidadao.response.body.token}}
+
+### Atualizar meus dados (cidadao)
+PUT {{baseUrl}}/api/usuarios/me
+Authorization: Bearer {{loginCidadao.response.body.token}}
+Content-Type: application/json
+
+{
+  "nome": "Cidadao",
+  "sobrenome": "Atualizado",
+  "telefone": "11912345678",
+  "email": "cidadao@email.com",
+  "endereco": {
+    "cep": "01001000",
+    "logradouro": "Praca da Se",
+    "numero": 1,
+    "complemento": null,
+    "bairro": "Se",
+    "cidade": "Sao Paulo",
+    "uf": "SP"
+  }
+}
+
+### Sem token (401)
+GET {{baseUrl}}/api/usuarios/me
