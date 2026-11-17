@@ -17,7 +17,7 @@ REM ---------------------------------------------------------------------------
 REM Variaveis editaveis: use os MESMOS valores do deploy-azure.cmd
 REM ---------------------------------------------------------------------------
 set GRUPO=rg-cade-minha-consulta
-set APP=cade-minha-consulta-api
+set APP=cademinhaconsulta-rm564205
 REM ---------------------------------------------------------------------------
 
 set JAR=target\cademinhaconsulta-0.0.1-SNAPSHOT.jar
