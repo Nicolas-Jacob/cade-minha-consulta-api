@@ -28,7 +28,7 @@ REM ---------------------------------------------------------------------------
 REM Grupo de recursos
 set GRUPO=rg-cade-minha-consulta
 REM Nome do app: precisa ser unico no Azure inteiro (vira parte da URL)
-set APP=cade-minha-consulta-api
+set APP=cademinhaconsulta-rm564205
 REM Regiao
 set REGIAO=brazilsouth
 REM Nome do App Service Plan
