@@ -30,6 +30,8 @@
 		<java.version>21</java.version>
 		<spring-ai.version>2.0.1</spring-ai.version>
 		<springdoc.version>3.1.1</springdoc.version>
+		<!-- Deve acompanhar a versao do swagger-core-jakarta trazida pelo springdoc (ver dependencyManagement) -->
+		<swagger-core.version>2.2.55</swagger-core.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -63,6 +65,15 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-openai</artifactId>
+			<exclusions>
+				<!-- O SDK da OpenAI traz as anotacoes do Swagger sem o sufixo -jakarta (2.2.31), com as mesmas
+				     classes da versao jakarta usada pelo springdoc. No jar executavel ela era carregada primeiro e
+				     quebrava o /v3/api-docs (NoSuchMethodError em Schema.$dynamicRef). A versao jakarta cobre o SDK. -->
+				<exclusion>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-annotations</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.springdoc</groupId>
@@ -125,6 +136,13 @@
 				<version>${spring-ai.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
+			</dependency>
+			<!-- O Spring AI traz swagger-annotations-jakarta 2.2.38, que venceria a do springdoc por estar mais perto
+			     na arvore. Alinha as anotacoes com o swagger-core-jakarta do springdoc. -->
+			<dependency>
+				<groupId>io.swagger.core.v3</groupId>
+				<artifactId>swagger-annotations-jakarta</artifactId>
+				<version>${swagger-core.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
