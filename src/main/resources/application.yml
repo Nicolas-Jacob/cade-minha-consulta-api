@@ -1,3 +1,8 @@
+# Porta do servidor. No Azure App Service (Linux, Java SE) a plataforma informa a porta na variavel PORT.
+# Localmente, sem PORT, fica 8080.
+server:
+  port: ${PORT:8080}
+
 spring:
   application:
     name: cademinhaconsulta
@@ -19,11 +24,16 @@ spring:
     open-in-view: false
     show-sql: false
 
+  # Local (docker compose): porta 5672, vhost /, sem SSL.
+  # CloudAMQP: porta 5671, vhost da instancia e RABBITMQ_SSL=true.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    ssl:
+      enabled: ${RABBITMQ_SSL:false}
     listener:
       simple:
         # Mensagem com erro e descartada, nunca volta para a fila (sem reprocessar em loop)
@@ -65,4 +75,9 @@ management:
     web:
       exposure:
         include: health
-  # O health do RabbitMQ esta ligado (padrao): com o broker fora do ar, /actuator/health responde DOWN
+  # O health reflete so o banco. A API funciona sem o broker (o cancelamento continua valendo e so a
+  # realocacao automatica da vaga para), entao o RabbitMQ fica fora: uma queda do broker nao deve
+  # marcar a instancia como doente no health check do Azure App Service e provocar reinicios.
+  health:
+    rabbit:
+      enabled: false
