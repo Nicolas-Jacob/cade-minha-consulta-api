@@ -4,19 +4,21 @@ API Java do app **Cadê minha consulta**, Global Solution FIAP 2026/2, tema **Ci
 
 | | |
 |---|---|
-| API em produção | LINK_DEPLOY |
-| Swagger UI em produção | LINK_DEPLOY/swagger-ui.html |
+| API em produção | https://cademinhaconsulta-rm564205.azurewebsites.net |
+| Swagger UI em produção | https://cademinhaconsulta-rm564205.azurewebsites.net/swagger-ui.html |
 | Repositório do app mobile | https://github.com/Nicolas-Jacob/cade-minha-consulta-mobile |
 | Vídeo pitch | LINK_VIDEO_PITCH |
 | Contrato entre a API e o app | [docs/CONTRATO_API.md](docs/CONTRATO_API.md) |
 
 ## Equipe
 
-| Nome | RM |
-|---|---|
-| | |
-| | |
-| | |
+| Nome | RM | Turma |
+|---|---|---|
+| João Victor Vendrameto | RM563665 | 2TDSPV |
+| Nicolas de Oliveira Jacob | RM564205 | 2TDSPX |
+| Gabriel Ambrósio Saraiva | RM566552 | 2TDSPV |
+| Vinicius Romaguera Cardozo | RM562308 | 2TDSPX |
+| Yuri Fuzinatto Garzoli Barreto | RM561450 | 2TDSPX |
 
 ## O problema
 
@@ -305,9 +307,9 @@ Para integrar o modelo, basta implementar `RiscoFaltaClient` e devolver o novo c
 
 | | |
 |---|---|
-| API | LINK_DEPLOY |
-| Swagger UI | LINK_DEPLOY/swagger-ui.html |
-| Health | LINK_DEPLOY/actuator/health |
+| API | https://cademinhaconsulta-rm564205.azurewebsites.net |
+| Swagger UI | https://cademinhaconsulta-rm564205.azurewebsites.net/swagger-ui.html |
+| Health | https://cademinhaconsulta-rm564205.azurewebsites.net/actuator/health |
 
 A API roda no **Azure App Service** (Linux, Java SE 21, plano B1), com o banco Oracle e o RabbitMQ no **CloudAMQP**.
 
@@ -381,4 +383,6 @@ O plano B1 é pago. Depois da avaliação, para apagar tudo: `az group delete --
 
 ## Declaração de uso de IA
 
-<!-- Preencher -->
+- **Claude (Anthropic):** apoio no planejamento da arquitetura, na geração de partes do código, na revisão de erros e na documentação.
+- Todo o código foi revisado, testado e integrado pela equipe, que entende e responde pelo funcionamento da solução.
+- A funcionalidade de IA do produto (orientações da consulta) usa o Spring AI e está descrita na seção [IA generativa (Spring AI)](#ia-generativa-spring-ai).
