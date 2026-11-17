@@ -16,6 +16,14 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
+    # O Oracle da FIAP fecha conexoes ociosas (ORA-17008: Closed connection). As conexoes do pool sao
+    # renovadas antes disso e as ociosas recebem um ping periodico.
+    hikari:
+      max-lifetime: 300000    # 5 min: tempo maximo de vida de cada conexao
+      idle-timeout: 120000    # 2 min: fecha conexoes ociosas acima do minimum-idle
+      keepalive-time: 60000   # 1 min: ping nas conexoes ociosas (precisa ser menor que o max-lifetime)
+      # Sem isto o minimum-idle e igual ao maximum-pool-size (10) e o Hikari ignora o idle-timeout
+      minimum-idle: 2
 
   jpa:
     # O schema vem dos scripts em /scripts. O Hibernate nunca cria ou altera tabelas.
