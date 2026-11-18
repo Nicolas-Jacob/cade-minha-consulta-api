@@ -1,6 +1,7 @@
 package br.com.fiap.cademinhaconsulta.repository;
 
 import br.com.fiap.cademinhaconsulta.model.Consulta;
+import br.com.fiap.cademinhaconsulta.risco.ComplementoPrevisao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -9,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 // Todas as buscas trazem junto o que o ConsultaResponse usa, para evitar N+1
@@ -52,4 +55,13 @@ public interface ConsultaRepository extends JpaRepository<Consulta, Long> {
             """)
     Page<Consulta> buscarProximas(@Param("agora") LocalDateTime agora, @Param("limite") LocalDateTime limite,
                                   Pageable pageable);
+
+    // Risco de falta: sexo do paciente e entrada na fila de varias consultas numa so consulta (sem N+1).
+    // O Oracle aceita no maximo 1000 itens no IN; o RiscoFaltaService chama em blocos.
+    @Query("""
+            select new br.com.fiap.cademinhaconsulta.risco.ComplementoPrevisao(c.id, c.usuario.sexo, c.fila.dataEntrada)
+            from Consulta c
+            where c.id in :ids
+            """)
+    List<ComplementoPrevisao> buscarComplementosPrevisao(@Param("ids") Collection<Long> ids);
 }
