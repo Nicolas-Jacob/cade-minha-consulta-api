@@ -575,9 +575,28 @@ GET {{baseUrl}}/api/gestor/consultas/proximas
 Authorization: Bearer {{loginCidadao.response.body.token}}
 
 # =====================================================================
-# GESTOR: risco de falta (FN_DADOS_PREVISAO_FALTA + RiscoFaltaClient)
-# Excecao a paginacao: array simples ordenado por dataHora. risco e nivel = null enquanto o modelo nao existe.
+# GESTOR: risco de falta (FN_DADOS_PREVISAO_FALTA + servico de IA vaga-certa-ia)
+# Excecao a paginacao: array simples ordenado por dataHora.
+# Com RISCO_FALTA_URL=http://localhost:8000 e o servico no ar: risco (0 a 1) e nivel (BAIXO/MEDIO/ALTO) preenchidos.
+# Sem RISCO_FALTA_URL ou com o servico fora do ar: 200 com risco e nivel = null (e WARN no log da API).
 # =====================================================================
+
+### Health do servico de IA (direto, sem token)
+GET http://localhost:8000/health
+
+### Login do gestor (para as chamadas de risco abaixo)
+# @name loginGestorRisco
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "gestor",
+  "senha": "SenhaGestor2026"
+}
+
+### Risco de falta nos proximos 15 dias com o token do login acima (200)
+GET {{baseUrl}}/api/gestor/consultas/risco-falta?dias=15
+Authorization: Bearer {{loginGestorRisco.response.body.token}}
 
 ### Risco de falta nos proximos 15 dias (200)
 GET {{baseUrl}}/api/gestor/consultas/risco-falta?dias=15

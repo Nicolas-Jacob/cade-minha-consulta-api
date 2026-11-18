@@ -30,7 +30,7 @@ No SUS, cerca de 1 em cada 4 pacientes falta à consulta com especialista sem av
 - Quando uma vaga é liberada, o sistema **agenda automaticamente** o próximo paciente compatível da fila.
 - O **gestor** da unidade agenda pacientes da fila para médicos, acompanha as próximas consultas e registra presença ou falta.
 - A **IA generativa** escreve lembretes e orientações de preparo em linguagem simples.
-- Um modelo de **ML** prevê o risco de falta. A API já tem o ponto de integração; o modelo, feito por outro integrante, entra depois.
+- Um modelo de **ML** (serviço `vaga-certa-ia`, feito por outro integrante) prevê o risco de falta das próximas consultas, e a API mostra esse risco ao gestor.
 
 **ODS 3 (Saúde e bem-estar):** menos vagas de especialista desperdiçadas significa mais atendimentos com a mesma estrutura e menos tempo de espera na fila.
 
@@ -50,14 +50,14 @@ flowchart LR
     mq -->|"vaga.liberada.queue"| consumer["VagaLiberadaConsumer"]
     consumer -->|"PRC_AGENDAR_CONSULTA"| db
     api -->|"Spring AI / ChatClient"| llm["LLM<br/>OpenAI"]
-    api -.->|"futuro: HTTP"| ml["Serviço de risco de falta<br/>modelo de ML"]
+    api -->|"HTTP: POST /v1/risco-falta/lote"| ml["Serviço de risco de falta<br/>vaga-certa-ia (FastAPI)"]
 ```
 
 - **App mobile → API:** REST com JSON e JWT no header `Authorization: Bearer <token>`.
 - **API → Oracle:** JPA para o CRUD. As regras de agendamento ficam em PL/SQL (`PKG_GS_GESTAO_CONSULTAS`, `PKG_GS_CONSULTA_DADOS`) e são chamadas com `SimpleJdbcCall`. O schema vem dos scripts de [scripts/](scripts/), nunca do Hibernate (`ddl-auto: none`).
 - **API → RabbitMQ → consumer → procedure:** a realocação da vaga liberada é assíncrona (ver [Arquitetura distribuída](#arquitetura-distribuída-opção-a-rabbitmq)). Local: RabbitMQ no Docker. Produção: CloudAMQP.
 - **API → LLM:** orientações da consulta com Spring AI (ver [IA generativa](#ia-generativa-spring-ai)).
-- **API → serviço de risco de falta (futuro):** ponto de integração pronto, hoje com um stub (ver [Risco de falta](#risco-de-falta)).
+- **API → serviço de risco de falta:** `RestClient` para o serviço `vaga-certa-ia` (Python/FastAPI), com timeouts e fallback para risco null. Sem `RISCO_FALTA_URL`, usa um stub (ver [Risco de falta](#risco-de-falta)).
 
 Pacotes do código (`br.com.fiap.cademinhaconsulta`): `controller`, `service`, `repository`, `model` (entidades JPA), `dto` (records), `enums`, `exception` (`@RestControllerAdvice`), `config` (segurança, JWT, OpenAPI), `messaging` (RabbitMQ) e `risco` (cliente do modelo de ML).
 
@@ -140,6 +140,9 @@ Os testes são unitários e **não precisam de banco, broker nem chave de IA**:
 
 - `OrientacaoServiceTest`: prompt da IA, fallback para o texto padrão e minimização de dados (o prompt não leva CPF, telefone, e-mail etc.).
 - `TokenServiceTest`: JWT com as claims do contrato (`sub`, `id`, `credencial`), conversão para `ROLE_GESTOR` e `ROLE_CIDADAO`, rejeição de token assinado com outra chave e de segredo com menos de 32 caracteres.
+- `MapeadorRiscoFaltaTest`: campos enviados ao serviço de risco (snake_case, sem null, datas `YYYY-MM-DD`, limites) e ausência de nome, CPF, telefone, e-mail e endereço no JSON.
+- `HttpRiscoFaltaClientTest`: cliente HTTP do risco com `MockRestServiceServer` (sem rede): sucesso, header `X-Service-Token`, id ausente, 401/422/500/503, timeout, JSON inválido, lista vazia e lotes de 500.
+- `RiscoFaltaConfigTest`: `RISCO_FALTA_URL` vazia usa o stub; preenchida usa o cliente HTTP.
 
 ## Usuários de teste
 
@@ -216,7 +219,7 @@ Todo GET de lista é paginado (`?page=0&size=10&sort=campo,asc`) e devolve `cont
 | POST | `/api/gestor/agendamentos` | GES | Body `{idMedico}`. Chama `PRC_AGENDAR_CONSULTA` e devolve 201 com a consulta criada (com `paciente`). Erros da procedure: 404 médico inexistente, 409 inativo/sem horário/fila alterada, 422 fila vazia |
 | GET | `/api/gestor/consultas/proximas?dias=15` | GES | AGENDADA/CONFIRMADA nos próximos `dias` (1 a 365), padrão `sort=dataHora,asc`, com `paciente` (nome e telefone) |
 | PATCH | `/api/gestor/consultas/{id}/presenca` | GES | Body `{status: "PRESENTE" \| "FALTA"}`. Só AGENDADA/CONFIRMADA com data passada (senão 409) |
-| GET | `/api/gestor/consultas/risco-falta?dias=15` | GES | Exceção à paginação: array de `RiscoFaltaResponse` ordenado por data. `risco` e `nivel` null até o modelo de ML ser integrado. Ver [Risco de falta](#risco-de-falta) |
+| GET | `/api/gestor/consultas/risco-falta?dias=15` | GES | Exceção à paginação: array de `RiscoFaltaResponse` ordenado por data. `risco` e `nivel` vêm do serviço de IA; ficam null sem `RISCO_FALTA_URL` ou se o serviço falhar (o endpoint continua 200). Ver [Risco de falta](#risco-de-falta) |
 
 ### Infra
 
@@ -288,20 +291,60 @@ As mensagens trafegam em JSON (`JacksonJsonMessageConverter`). Exchange, fila e 
 
 ## Risco de falta
 
-`GET /api/gestor/consultas/risco-falta?dias=15` (só GESTOR) lista as consultas AGENDADA ou CONFIRMADA dos próximos `dias` (1 a 365) com o risco de falta de cada uma. Pelo contrato, é uma **exceção à paginação**: devolve um array simples de `RiscoFaltaResponse`, ordenado pela data da consulta.
+`GET /api/gestor/consultas/risco-falta?dias=15` (só GESTOR) lista as consultas AGENDADA ou CONFIRMADA dos próximos `dias` (1 a 365) com o risco de falta de cada uma. Pelo contrato, é uma **exceção à paginação**: devolve um array simples de `RiscoFaltaResponse` (`idConsulta, paciente, dataHora, especialidade, risco, nivel`), ordenado pela data da consulta.
 
-**Fluxo** (`RiscoFaltaService`):
+O risco vem do **serviço de IA do grupo**, o repositório `vaga-certa-ia` (Python/FastAPI, modelo `gradient_boosting`).
 
-1. Chama a função `PKG_GS_CONSULTA_DADOS.FN_DADOS_PREVISAO_FALTA(p_dias)` via `SimpleJdbcCall`. Ela devolve um `SYS_REFCURSOR`, e cada linha vira um `DadosPrevisaoFalta` com os atributos do modelo: dias até a consulta, dia da semana, hora e turno, idade do paciente, prioridade da fila, especialidade, unidade, faltas, presenças e cancelamentos anteriores, e taxa histórica de faltas.
-2. Envia a lista ao `RiscoFaltaClient.prever(...)`, que devolve uma `PrevisaoRisco { idConsulta, risco (0 a 1), nivel (BAIXO/MEDIO/ALTO) }` por consulta.
-3. Junta o nome do paciente, buscado pela própria API. O nome não vem do cursor e não vai para o modelo.
+```mermaid
+sequenceDiagram
+    participant G as App (GESTOR)
+    participant A as API (RiscoFaltaService)
+    participant O as Oracle
+    participant IA as vaga-certa-ia (FastAPI)
+    G->>A: GET /api/gestor/consultas/risco-falta?dias=15
+    A->>O: FN_DADOS_PREVISAO_FALTA(p_dias)
+    A->>O: sexo e data_entrada da fila (JPQL com IN, em lote)
+    A->>IA: POST /v1/risco-falta/lote (até 500 por chamada)
+    IA-->>A: probabilidade_falta e faixa_risco por consulta_id
+    A->>O: nome do paciente (só para a resposta)
+    A-->>G: 200 [RiscoFaltaResponse]
+```
 
-**Ponto de integração com o modelo de ML:** o `RiscoFaltaConfig` escolhe a implementação pela variável `RISCO_FALTA_URL` (propriedade `risco-falta.url`):
+**Fluxo** (`RiscoFaltaService` e pacote `risco`):
+
+1. Chama `PKG_GS_CONSULTA_DADOS.FN_DADOS_PREVISAO_FALTA(p_dias)` via `SimpleJdbcCall`. Cada linha do `SYS_REFCURSOR` vira um `DadosPrevisaoFalta`.
+2. Busca o que o cursor não traz, o sexo do paciente e a entrada na fila (`ComplementoPrevisao`), em **uma** consulta JPQL com `IN` pelos ids das consultas (`ConsultaRepository.buscarComplementosPrevisao`), em blocos de até 1000 ids por causa do limite do Oracle. Sem N+1 e sem alterar o PL/SQL.
+3. O `MapeadorRiscoFalta` monta um item por consulta e o valida com as regras do serviço. Um item inválido derrubaria o lote inteiro com 422, então ele não é enviado e a consulta fica com `risco` e `nivel` null (log WARN só com o id da consulta).
+4. O `HttpRiscoFaltaClient` envia os itens em lotes de até 500 para `POST {RISCO_FALTA_URL}/v1/risco-falta/lote`, com o header `X-Service-Token` só se `RISCO_FALTA_TOKEN` estiver preenchida. As respostas são casadas por `consulta_id`; uma consulta sem resposta fica null.
+5. Junta o nome do paciente, buscado pela própria API. O nome não vem do cursor e não vai para o serviço de IA.
+
+**Campos enviados ao serviço** (um item por consulta):
+
+| Campo | Origem | Observação |
+|---|---|---|
+| `consulta_id` | `id_consulta` do cursor | como texto |
+| `idade` | `idade_paciente` do cursor (idade na data da consulta) | limitada a 0..110 |
+| `genero` | `TB_GS_USUARIO.sexo_usuario` (Consulta → Usuario) | `F` ou `M`; sem valor = item não enviado |
+| `data_agendamento` | `TB_GS_FILA.data_entrada` (Consulta → Fila), só a data | **aproximação**: o sistema não guarda a data de criação da consulta, então usa a entrada do paciente na fila. Se for posterior à consulta, usa a data da consulta |
+| `data_consulta` | `data_consulta` do cursor, só a data | `YYYY-MM-DD` |
+| `consultas_anteriores` | `qtd_presencas_historico + qtd_faltas_historico` | limitado a 1000 (cancelamentos não entram) |
+| `faltas_anteriores` | `qtd_faltas_historico` | limitado a 1000 e nunca maior que `consultas_anteriores` |
+| `bolsa_familia`, `hipertensao`, `diabetes`, `alcoolismo`, `deficiencia`, `sms_recebido` | sempre `false` | o banco não tem esses dados e o serviço não aceita null |
+
+**Minimização de dados (LGPD):** só saem da API os campos acima. Nome, sobrenome, CPF, nome da mãe e do pai, telefone, e-mail, endereço, login e até o id do usuário ficam na API. O teste `MapeadorRiscoFaltaTest` garante que o JSON enviado não tem esses dados. Os logs do cliente também não registram dados pessoais, o corpo das respostas de erro (o 422 ecoa os dados enviados) nem o token.
+
+**Risco e nível:** `risco` é a `probabilidade_falta` do modelo (0 a 1, com 4 casas; fora do intervalo = null). `nivel` é a **`faixa_risco` do próprio modelo** (`baixo` → `BAIXO`, `medio` → `MEDIO`, `alto` → `ALTO`), que já considera limiares por faixa etária. A API não recalcula o nível a partir do risco.
+
+**Timeouts e fallback:** conexão em 3000 ms e leitura em 15000 ms (`RISCO_FALTA_CONNECT_TIMEOUT_MS` e `RISCO_FALTA_READ_TIMEOUT_MS`). Qualquer falha do serviço (conexão recusada, timeout, 401, 422, 503, 500, JSON inválido), mesmo em um só lote, gera um log WARN `Risco de falta indisponivel: <motivo>` e devolve **todas** as consultas com `risco` e `nivel` null, sem lotes parciais. O endpoint continua respondendo **200**, nunca 500. Em caso de sucesso, um log INFO registra a quantidade enviada, o tempo e o nome do modelo.
+
+**Escolha do cliente** (`RiscoFaltaConfig`, pela variável `RISCO_FALTA_URL`):
 
 - vazia (padrão): `StubRiscoFaltaClient`, que devolve `risco` e `nivel` null para todas as consultas;
-- preenchida: é onde entra o cliente HTTP real (um `HttpRiscoFaltaClient` com `RestClient`, que envia os atributos ao serviço do modelo e lê as previsões). Esse cliente ainda não foi implementado: por enquanto, a API registra um aviso no log e continua usando o stub.
+- preenchida: `HttpRiscoFaltaClient`.
 
-Para integrar o modelo, basta implementar `RiscoFaltaClient` e devolver o novo cliente no `RiscoFaltaConfig`. O service, o controller e o contrato não mudam. Depois, é só definir `RISCO_FALTA_URL` no App Service e rodar o `scripts\redeploy-azure.cmd`.
+**Como rodar com o serviço de IA:** hoje o `vaga-certa-ia` roda localmente. Suba-o seguindo o README do repositório `vaga-certa-ia` (porta 8000; confira em `http://localhost:8000/health`, que não exige token) e, no `.env` da API, defina `RISCO_FALTA_URL=http://localhost:8000`. Se o serviço exigir token, use em `RISCO_FALTA_TOKEN` o mesmo valor configurado nele. O [test.http](test.http) tem o login do gestor, a chamada de risco e o health do serviço.
+
+**Produção:** quando o serviço estiver publicado, basta definir `RISCO_FALTA_URL` (e `RISCO_FALTA_TOKEN`, se houver) no App Service e rodar o `scripts\redeploy-azure.cmd`. O service, o controller e o contrato não mudam.
 
 ## Deploy (Azure App Service)
 
@@ -366,7 +409,10 @@ O plano B1 é pago. Depois da avaliação, para apagar tudo: `az group delete --
 | `RABBITMQ_PASSWORD` | Senha do RabbitMQ | `guest` | senha da instância |
 | `RABBITMQ_VIRTUAL_HOST` | Vhost do RabbitMQ | `/` | vhost da instância |
 | `RABBITMQ_SSL` | Conexão com SSL | `false` | `true` |
-| `RISCO_FALTA_URL` | URL do serviço do modelo de risco de falta. Vazio = stub (risco null) | vazio | vazio até a integração |
+| `RISCO_FALTA_URL` | URL do serviço de risco de falta (`vaga-certa-ia`). Vazio = stub (risco null) | `http://localhost:8000` (ou vazio) | URL do serviço publicado (vazio enquanto ele só roda localmente) |
+| `RISCO_FALTA_TOKEN` | Token enviado no header `X-Service-Token`, só se preenchido | vazio | o mesmo configurado no serviço |
+| `RISCO_FALTA_CONNECT_TIMEOUT_MS` | Timeout de conexão com o serviço de risco | `3000` | igual |
+| `RISCO_FALTA_READ_TIMEOUT_MS` | Timeout de leitura da resposta do serviço de risco | `15000` | igual |
 | `PORT` | Porta do servidor. **Definida pelo App Service**, não vai no `.env` | (8080) | automática |
 
 ## Requisitos de Java Advanced
