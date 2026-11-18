@@ -64,9 +64,14 @@ spring:
 orientacao:
   timeout-segundos: 20
 
-# Modelo de ML de risco de falta. Vazio = StubRiscoFaltaClient (risco e nivel null)
+# Servico de risco de falta (vaga-certa-ia, FastAPI). Localmente roda em http://localhost:8000.
+# url vazia = StubRiscoFaltaClient (risco e nivel null); preenchida = HttpRiscoFaltaClient.
+# token: enviado no header X-Service-Token so se preenchido. Em qualquer falha, risco e nivel null (endpoint 200).
 risco-falta:
   url: ${RISCO_FALTA_URL:}
+  token: ${RISCO_FALTA_TOKEN:}
+  connect-timeout-ms: ${RISCO_FALTA_CONNECT_TIMEOUT_MS:3000}
+  read-timeout-ms: ${RISCO_FALTA_READ_TIMEOUT_MS:15000}
 
 jwt:
   secret: ${JWT_SECRET}

@@ -2,7 +2,9 @@ package br.com.fiap.cademinhaconsulta.service;
 
 import br.com.fiap.cademinhaconsulta.dto.RiscoFaltaResponse;
 import br.com.fiap.cademinhaconsulta.model.Usuario;
+import br.com.fiap.cademinhaconsulta.repository.ConsultaRepository;
 import br.com.fiap.cademinhaconsulta.repository.UsuarioRepository;
+import br.com.fiap.cademinhaconsulta.risco.ComplementoPrevisao;
 import br.com.fiap.cademinhaconsulta.risco.DadosPrevisaoFalta;
 import br.com.fiap.cademinhaconsulta.risco.PrevisaoRisco;
 import br.com.fiap.cademinhaconsulta.risco.RiscoFaltaClient;
@@ -16,6 +18,7 @@ import javax.sql.DataSource;
 import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -23,7 +26,7 @@ import java.util.stream.Collectors;
 
 // Risco de falta das proximas consultas (GESTOR). Os atributos vem da funcao
 // PKG_GS_CONSULTA_DADOS.FN_DADOS_PREVISAO_FALTA(p_dias), que devolve um SYS_REFCURSOR,
-// e a previsao vem do RiscoFaltaClient (hoje o stub, com risco e nivel null).
+// e a previsao vem do RiscoFaltaClient (servico de IA vaga-certa-ia, ou o stub com risco e nivel null).
 @Service
 public class RiscoFaltaService {
 
@@ -48,14 +51,19 @@ public class RiscoFaltaService {
             rs.getInt("QTD_CANCELAMENTOS_HISTORICO"),
             rs.getDouble("TAXA_FALTAS_HISTORICA_PCT"));
 
+    // Maximo de itens num IN do Oracle
+    private static final int LIMITE_IN = 1000;
+
     private final SimpleJdbcCall dadosPrevisaoFalta;
     private final RiscoFaltaClient riscoFaltaClient;
     private final UsuarioRepository usuarioRepository;
+    private final ConsultaRepository consultaRepository;
 
     public RiscoFaltaService(DataSource dataSource, RiscoFaltaClient riscoFaltaClient,
-                             UsuarioRepository usuarioRepository) {
+                             UsuarioRepository usuarioRepository, ConsultaRepository consultaRepository) {
         this.riscoFaltaClient = riscoFaltaClient;
         this.usuarioRepository = usuarioRepository;
+        this.consultaRepository = consultaRepository;
         // Funcao: o retorno (cursor) e declarado primeiro, depois o parametro de entrada
         this.dadosPrevisaoFalta = new SimpleJdbcCall(dataSource)
                 .withCatalogName("PKG_GS_CONSULTA_DADOS")
@@ -76,8 +84,8 @@ public class RiscoFaltaService {
             return List.of();
         }
 
-        Map<Long, PrevisaoRisco> previsoes = riscoFaltaClient.prever(atributos).stream()
-                .collect(Collectors.toMap(PrevisaoRisco::idConsulta, Function.identity()));
+        Map<Long, PrevisaoRisco> previsoes = riscoFaltaClient.prever(atributos, buscarComplementos(atributos)).stream()
+                .collect(Collectors.toMap(PrevisaoRisco::idConsulta, Function.identity(), (a, b) -> a));
         // O nome do paciente nao vem do cursor nem vai para o modelo: so aparece na resposta para o GESTOR
         Map<Long, String> pacientes = usuarioRepository
                 .findAllById(atributos.stream().map(DadosPrevisaoFalta::idUsuario).distinct().toList()).stream()
@@ -97,5 +105,16 @@ public class RiscoFaltaService {
                             previsao != null ? previsao.nivel() : null);
                 })
                 .toList();
+    }
+
+    // Sexo e entrada na fila (o cursor nao traz), em blocos de ate 1000 ids por consulta
+    private Map<Long, ComplementoPrevisao> buscarComplementos(List<DadosPrevisaoFalta> atributos) {
+        List<Long> ids = atributos.stream().map(DadosPrevisaoFalta::idConsulta).distinct().toList();
+        Map<Long, ComplementoPrevisao> complementos = new HashMap<>();
+        for (int i = 0; i < ids.size(); i += LIMITE_IN) {
+            consultaRepository.buscarComplementosPrevisao(ids.subList(i, Math.min(i + LIMITE_IN, ids.size())))
+                    .forEach(complemento -> complementos.put(complemento.idConsulta(), complemento));
+        }
+        return complementos;
     }
 }

@@ -65,7 +65,7 @@ public class GestorController {
     // Excecao a paginacao (contrato, secao 6): array simples ordenado pela data da consulta
     @GetMapping("/consultas/risco-falta")
     @Operation(summary = "Risco de falta das consultas AGENDADA/CONFIRMADA nos proximos dias (array, ordenado por "
-            + "dataHora). Enquanto o modelo de ML nao estiver integrado, risco e nivel = null")
+            + "dataHora). risco e nivel vem do servico de IA; null sem RISCO_FALTA_URL ou se o servico falhar")
     public List<RiscoFaltaResponse> listarRiscoFalta(@RequestParam(defaultValue = "15") @Min(1) @Max(365) int dias) {
         return riscoFaltaService.listar(dias);
     }
