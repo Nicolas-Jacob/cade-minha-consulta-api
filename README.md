@@ -8,6 +8,7 @@ API Java do app **Cadê minha consulta**, Global Solution FIAP 2026/2, tema **Ci
 | Swagger UI em produção | https://cademinhaconsulta-rm564205.azurewebsites.net/swagger-ui.html |
 | Repositório do app mobile | https://github.com/Nicolas-Jacob/cade-minha-consulta-mobile |
 | Vídeo pitch | https://youtu.be/hUzrO14MWPc |
+| Vídeo da apresentação técnica | https://youtu.be/yFQxA4hCw_o |
 | Contrato entre a API e o app | [docs/CONTRATO_API.md](docs/CONTRATO_API.md) |
 
 ## Equipe
